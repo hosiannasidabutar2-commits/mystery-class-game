@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MYSTERY CLASS | Ruang Investigasi</title>
+<style>
+:root{--navy:#18243a;--gold:#e8b84d;--cream:#fff8e9;--pink:#e7a8b4;--ink:#202b3d}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(135deg,#18243a,#283c58);color:var(--ink);min-height:100vh;padding:20px}
+main{max-width:720px;margin:30px auto;background:var(--cream);border-radius:22px;padding:clamp(20px,5vw,36px);box-shadow:0 20px 60px #0004}
+header{text-align:center;margin-bottom:24px}header .seal{font-size:38px}h1{margin:5px 0;color:var(--navy);letter-spacing:1px}header p{margin:6px;color:#566175}
+.panel{background:white;border:1px solid #e6ddcb;border-radius:16px;padding:20px;margin:16px 0}
+label{display:block;font-weight:700;margin:12px 0 6px}input{width:100%;padding:13px;border:1px solid #c9cdd4;border-radius:10px;font-size:16px}
+button{border:0;background:var(--navy);color:white;padding:13px 18px;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:14px;width:100%}button.secondary{background:#8b6727}button:disabled{opacity:.5;cursor:not-allowed}
+.status{margin-top:12px;padding:12px;border-radius:10px;background:#f4e7c8;white-space:pre-wrap}.hidden{display:none!important}.member{padding:8px;border-bottom:1px solid #eee}.count{font-weight:800;color:#8b6727}.tiny{font-size:13px;color:#687284}
+</style>
+</head>
+<body>
+<main>
+<header><div class="seal">🔎🗝️</div><h1>MYSTERY CLASS</h1><p>Ruang Investigasi • Kerja sama tim</p></header>
+<section id="join" class="panel">
+<h2>Masuk ke kelompok</h2>
+<p class="tiny">Gunakan kode kelompok yang diberikan. Jangan masukkan informasi pribadi.</p>
+<label for="code">Kode kelompok</label><input id="code" maxlength="24" placeholder="Contoh: KELAS6A">
+<label for="name">Nama anggota (nama panggilan boleh)</label><input id="name" maxlength="40" placeholder="Masukkan nama">
+<button id="joinBtn">Daftar sebagai anggota</button>
+<div id="joinStatus" class="status hidden"></div>
+</section>
+<section id="team" class="panel hidden">
+<h2 id="teamTitle">Kelompok</h2>
+<div id="members"></div><p class="count" id="count"></p>
+<div id="teamStatus" class="status"></div>
+<button id="gameBtn" disabled>Masuk ke ruang permainan</button>
+<button id="resetBtn" class="secondary">Keluar / ganti nama</button>
+</section>
+<section id="game" class="panel hidden">
+<h2>🕵️ Ruang Investigasi terbuka!</h2>
+<p>Selamat, kelompokmu sudah terdaftar dengan 5 anggota.</p>
+<p>Bagian ini nanti akan kita isi dengan misi, petunjuk, soal, dan pengumpulan jawaban kelompok MYSTERY CLASS.</p>
+<button id="backBtn" class="secondary">Kembali ke daftar anggota</button>
+</section>
+</main>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+import { getDatabase, ref, get, set, runTransaction } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCxVuKTsPL5pAB6m8bHBMSZxvTFEPff_-4",
+  authDomain: "mystery-class-01.firebaseapp.com",
+  databaseURL: "https://mystery-class-01-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "mystery-class-01",
+  storageBucket: "mystery-class-01.firebasestorage.app",
+  messagingSenderId: "544532285887",
+  appId: "1:544532285887:web:3c78429e18c7a36887b90a",
+  measurementId: "G-V69ZQH7SD6"
+};
+const app=initializeApp(firebaseConfig), db=getDatabase(app);
+const $=id=>document.getElementById(id);
+let currentCode="", currentName="";
+function clean(s){return s.trim().replace(/\s+/g," ")}
+function safeCode(s){return clean(s).toUpperCase().replace(/[^A-Z0-9_-]/g,"")}
+function showStatus(id,msg){$(id).textContent=msg;$(id).classList.remove("hidden")}
+async function loadTeam(code,name){
+ currentCode=code;currentName=name;
+ $("join").classList.add("hidden");$("team").classList.remove("hidden");$("game").classList.add("hidden");
+ $("teamTitle").textContent="Kelompok "+code;
+ try{
+   const snap=await get(ref(db,"groups/"+code));
+   const data=snap.val()||{members:{}};
+   const arr=Object.values(data.members||{});
+   $("members").innerHTML="";
+   arr.forEach(m=>{const d=document.createElement("div");d.className="member";d.textContent="🔐 "+m.name;$("members").appendChild(d)});
+   $("count").textContent=`Anggota terdaftar: ${arr.length}/5`;
+   const found=arr.some(m=>m.name.toLowerCase()===name.toLowerCase());
+   $("gameBtn").disabled=!(arr.length===5&&found);
+   $("teamStatus").textContent=arr.length===5?(found?"Kelompok lengkap! Kamu terdaftar. Game bisa dibuka.":"Kelompok sudah penuh. Nama ini tidak terdaftar."):`Menunggu anggota lainnya. ${found?"Nama kamu sudah terdaftar.":"Nama belum terdaftar."}`;
+ }catch(e){$("teamStatus").textContent="Tidak dapat membaca database. Cek Rules Firebase dan koneksi internet."; $("gameBtn").disabled=true}
+}
+$("joinBtn").onclick=async()=>{
+ const code=safeCode($("code").value),name=clean($("name").value);
+ if(!code||!name){showStatus("joinStatus","Isi kode kelompok dan nama terlebih dahulu.");return}
+ if(name.length>40){showStatus("joinStatus","Nama terlalu panjang.");return}
+ $("joinBtn").disabled=true;
+ try{
+  const groupRef=ref(db,"groups/"+code);
+  let message="";
+  const result=await runTransaction(groupRef,cur=>{
+   cur=cur||{members:{}};
+   cur.members=cur.members||{};
+   const members=Object.values(cur.members);
+   if(members.some(m=>m.name.toLowerCase()===name.toLowerCase())){message="Nama tersebut sudah terdaftar.";return;}
+   if(members.length>=5){message="Kelompok sudah penuh (5 anggota).";return;}
+   const id="m"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+   cur.members[id]={name:name};
+   return cur;
+  });
+  if(!result.committed){showStatus("joinStatus",message||"Pendaftaran gagal. Coba lagi.");}
+  else {await loadTeam(code,name);}
+ }catch(e){showStatus("joinStatus","Pendaftaran gagal. Database belum mengizinkan akses atau koneksi bermasalah.")}
+ finally{$("joinBtn").disabled=false}
+};
+$("gameBtn").onclick=()=>{if($("gameBtn").disabled)return;$("team").classList.add("hidden");$("game").classList.remove("hidden")};
+$("resetBtn").onclick=()=>{currentCode="";currentName="";$("team").classList.add("hidden");$("join").classList.remove("hidden");$("game").classList.add("hidden");$("joinStatus").classList.add("hidden")};
+$("backBtn").onclick=()=>loadTeam(currentCode,currentName);
+</script>
+</body>
+</html>
